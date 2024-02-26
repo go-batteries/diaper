@@ -35,6 +35,11 @@ func LoadProviders(reader io.Reader) Providers {
 	return providers
 }
 
+func BuildProviders(providers ...ValueProvider) Providers {
+	providers = append(providers, NoopProvider{})
+	return providers
+}
+
 type ValueProvider interface {
 	Deref(interface{}) interface{}
 }
