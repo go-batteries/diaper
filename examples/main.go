@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -22,6 +23,12 @@ func setupEnv() func() {
 	}
 }
 
+type AppConfig struct {
+	DatabaseName string
+	AwsAccessKey string
+	Port         int
+}
+
 func main() {
 	providerFile := flag.String("p", "", "provider file name")
 	envFilePath := flag.String("e", "", "env file name")
@@ -29,8 +36,6 @@ func main() {
 
 	getPath, err := filepath.Abs(*providerFile)
 	assertErr(err, "failed to build file path")
-
-	logrus.Println("haha", getPath, *providerFile)
 
 	reader, err := os.Open(getPath)
 	assertErr(err, "failed to read file")
@@ -49,8 +54,15 @@ func main() {
 
 	defer setupEnv()()
 
-	cfg, err := loader.ReadFromFile(env, *envFilePath)
+	cfgMap, err := loader.ReadFromFile(env, *envFilePath)
 	assertErr(err, "failed to load config")
 
-	logrus.Printf("config %v\n", cfg)
+	cfg := AppConfig{
+		DatabaseName: cfgMap.MustGet("database_name").(string),
+		Port:         cfgMap.MustGetInt("port"),
+		AwsAccessKey: cfgMap.MustGet("aws_access_key_id").(string),
+	}
+
+	b, _ := json.MarshalIndent(cfg, " ", "  ")
+	logrus.Printf("%s\n", string(b))
 }
