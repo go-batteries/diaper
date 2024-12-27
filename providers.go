@@ -1,11 +1,12 @@
 package diaper
 
 import (
+	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,7 +19,7 @@ func LoadProviders(reader io.Reader) Providers {
 
 	decoder := yaml.NewDecoder(reader)
 	if err := decoder.Decode(&pc); err != nil {
-		logrus.WithError(err).Fatal("failed to decode provider config")
+		log.Fatal(fmt.Errorf("failed to decode provider config. error %w", err))
 	}
 
 	providers := Providers{}

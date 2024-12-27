@@ -2,19 +2,20 @@ package diaper
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 type DiaperConfig struct {
 	Providers      Providers
 	DefaultEnvFile string
+	SetMissingEnv  bool
 }
 
 const (
@@ -37,7 +38,7 @@ func (dc *DiaperConfig) ReadFromFile(env, path string) (ConfigMap, error) {
 		filepath.Join(path, dc.DefaultEnvFile),
 	)
 	if err != nil {
-		logrus.WithError(err).Error("file path", dc.DefaultEnvFile)
+		log.Print(fmt.Errorf("file path %s, failed to load: %w", dc.DefaultEnvFile, err))
 		return nil, err
 	}
 
@@ -52,13 +53,10 @@ func (dc *DiaperConfig) ReadFromFile(env, path string) (ConfigMap, error) {
 
 	if err != nil {
 		// if override file not found use default
-		logrus.WithError(err).Warnln("failed to find override env file", envOrrideFile)
-		logrus.WithError(err).Debugln("file full path tried ", envFilePath)
-
+		// logrus.WithError(err).Warnln("failed to find override env file", envOrrideFile)
+		// logrus.WithError(err).Debugln("file full path tried ", envFilePath)
 		envFilePath = defaultEnvFilePath
 	}
-
-	logrus.Debugln("using", envFilePath)
 
 	viper.AddConfigPath(path)
 	viper.SetConfigType("env")
@@ -67,20 +65,30 @@ func (dc *DiaperConfig) ReadFromFile(env, path string) (ConfigMap, error) {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		logrus.WithError(err).Fatal("failed to read env file")
+		log.Fatal(fmt.Errorf("failed to read env file. error %w", err))
 	}
 
 	configMap := ConfigMap{}
 
 	if err := viper.Unmarshal(&configMap); err != nil {
-		logrus.WithError(err).Fatal("failed to unmarshap config")
+		log.Fatal(fmt.Errorf("failed to unmarshal config. error %w", err))
 	}
 
 	for key, value := range configMap {
 		configMap[key] = dc.Providers.Deref(value)
+
+		if !dc.SetMissingEnv {
+			continue
+		}
+
+		// Set the value in ENV if not present
+		configValue := configMap.MustGetString(key)
+		if os.Getenv(key) != configValue {
+			os.Setenv(key, configValue)
+		}
 	}
 
-	logrus.Debugln(configMap)
+	// logrus.Debugln(configMap)
 	return configMap, nil
 }
 
@@ -93,6 +101,19 @@ func (cmap ConfigMap) Get(key string) (interface{}, bool) {
 	}
 
 	return value, true
+}
+
+func (cmap ConfigMap) GetString(key string) (string, bool) {
+	value, ok := cmap[key]
+	if !ok {
+		return "", false
+	}
+
+	strValue, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	return strValue, true
 }
 
 func (cmap ConfigMap) GetInt(key string) (int, bool) {
@@ -124,7 +145,7 @@ func (cmap ConfigMap) GetInt(key string) (int, bool) {
 func (cmap ConfigMap) MustGetInt(key string) int {
 	value, ok := cmap.GetInt(key)
 	if !ok {
-		logrus.Fatal("value for", key, "cannot be cooerced to string")
+		log.Fatal("value for", key, "cannot be cooerced to string")
 	}
 
 	return value
@@ -133,7 +154,16 @@ func (cmap ConfigMap) MustGetInt(key string) int {
 func (cmap ConfigMap) MustGet(key string) interface{} {
 	value, ok := cmap.Get(key)
 	if !ok {
-		logrus.Fatal(key, " not found")
+		log.Fatal(key, "not found")
+	}
+
+	return value
+}
+
+func (cmap ConfigMap) MustGetString(key string) string {
+	value, ok := cmap.GetString(key)
+	if !ok {
+		return fmt.Sprintf("%v", value)
 	}
 
 	return value

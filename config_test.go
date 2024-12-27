@@ -1,10 +1,10 @@
 package diaper
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,8 +51,6 @@ func buildTestConfigStruct(configMap ConfigMap) *AppConfig {
 }
 
 func Test_ReadConfigFromFile(t *testing.T) {
-	logrus.SetLevel(logrus.DebugLevel)
-
 	t.Run("success when required fields are present", func(t *testing.T) {
 		envMap := map[string]interface{}{
 			"AUTHZ_CLIENT_ID":     "clientid",
@@ -81,5 +79,26 @@ func Test_ReadConfigFromFile(t *testing.T) {
 
 		assert.Equal(t, "clientid", cfg.Authz.ClientID)
 		assert.Equal(t, 9090, cfgMap.MustGetInt("port"))
+
+		assert.NotEqual(t, fmt.Sprintf("%v", cfg.Port), os.Getenv("port"))
+	})
+
+	t.Run("set value in OS env from file, if not present", func(t *testing.T) {
+		dc := DiaperConfig{
+			Providers:      Providers{EnvProvider{}},
+			DefaultEnvFile: "app.env",
+			SetMissingEnv:  true,
+		}
+
+		cfgMap, err := dc.ReadFromFile("test", "./examples/")
+		require.NoError(t, err)
+
+		defer func() {
+			os.Unsetenv("port")
+		}()
+
+		assert.Equal(t, fmt.Sprintf("%v", cfgMap.MustGetInt("port")), os.Getenv("port"))
+		assert.Equal(t, cfgMap.MustGetString("authz_client_id"), "")
+
 	})
 }
